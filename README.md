@@ -52,17 +52,43 @@ With **log_telegrams** you can control if decoded mlgw telegrams should be logge
 The following attributes are used to **send commands** to a B&O device:
 
 ### mlgw_send
-**mlgw_send** has to be specified to send commands to a B&O device. To send a b&o command (like a beo4 key-press), you have to set **mlgw_send** = *cmd*. Alternatively you could set **mlgw_send** = *ch*. In this case, you send aprogram/channel number to the B&O device.
+**mlgw_send** has to be specified to send commands to a B&O device. To send a b&o command (like a beo4 key-press), you have to set **mlgw_send** = *cmd*. Alternatively you could set **mlgw_send** = *ch*. In this case, you send a program/channel number to the B&O device.
 
-When setting **mlgw_send** = *cmd*, you have two options for the datatype. You could set **type** = *str*. In this case the name of the command has to be passed to the item (e.g. 'DVD'). 
+When setting **mlgw_send** = *cmd*, you have two options for the datatype. You could set **type** = *str*. In this case the name of the command has to be passed to the item (e.g. 'DVD'). For the list of supported commands look at the description of the attribute **mlgw_cmd**.
 
 As second option you could set **type** = *bool*. This way you have to specify the command to send with **mlgw_cmd**. (e.g.: **mlgw_cmd** = *'DVD'*). In this case you have to pass *True* to the item to send the preconfigured command.
 
+When setting **mlgw_send** = *ch*, you have to define the datatype as numeric (**type** = *num*). The number passed to the item is then sent out as a sequence of mlgw Digit-commands.
+ 
 **enforce_updates** = *true* has to be set in conjunction with **mlgw_send**. Otherwise the command will be send only the first time.
 
 ### mlgw_cmd
 **mlgw_cmd** has to be specified, if you set **mlgw_send** = *cmd* and define the item's datatype as *bool*. In conjunction with **mlgw_send**, the attribute **mlgw_cmd** specifies the command to send (e.g.: **mlgw_cmd** = *'DVD'*). 
 
+The following commands are supported at the moment:
+
+    Source selection:
+      'Standby', 'Sleep', 'TV', 'Radio', 'DTV2', 'Aux_A', 'V.Mem'),
+      'DVD', 'Camera', 'Text', 'DTV', 'PC', 'Doorcam', 'A.Mem', 'CD', 
+      'N.Radio', 'N.Music', 'CD2'
+    Digits:
+      'Digit-0', 'Digit-1', 'Digit-2', 'Digit-3', 'Digit-4', 
+      'Digit-5', 'Digit-6', 'Digit-7', 'Digit-8', 'Digit-9' 
+    Source control:
+      'STEP_UP', 'STEP_DW', 'REWIND', 'RETURN', 'WIND', 'Go / Play', 
+      'Stop', 'Yellow', 'Green', 'Blue', 'Red' 
+    Sound and picture control:
+      'Mute', 'P.Mute', 'Format', 'Sound / Speaker', 'Menu', 'Volume UP',
+      'Volume DOWN', 'Cinema_On', 'Cinema_Off' 
+    Other controls:
+      'BACK', 'Exit' 
+    Continue functionality:
+      'Key Release' 
+    Cursor functions:
+      'SELECT', 'Cursor_Up', 'Cursor_Down', 'Cursor_Left', 'Cursor_Right' 
+    Functions:
+      'Light'
+ 
 
 ### mlgw_mln
 **mlgw_mln** specifies the destination (B&O device) to which the command is being sent. The *Masterlink Node* (MLN) numbers of the B&O devices have been specified in the Masterlink Gateway configuration.
