@@ -1,5 +1,7 @@
 # Bang & Olufsen Masterlink Gateway #
 
+Version 0.3 beta
+
 This plugin can send commands to all Bang & Olufsen audio- and video systems which are connected to a Masterlink Gateway. Supported commands are the commands, a B&O remote can produce.
 
 This plugin can receive telegrams, which are send by an B&O audio- or video system. These commands are the **LIGHT** and **CONTROL** commands, which originate from a B&O remote control (e.g. Beo4).
@@ -27,7 +29,7 @@ This plugin need a Bang & Olufsen Masterlink Gateway and can connect to it via T
 #    port = 9000
 #    username = mlgw
 #    password = mlgw
-#    rooms = []
+#    rooms = ['living', 'kitchen']
 #    Mlns = []
 #    log_mlgwtelegrams = 0
 </pre>
@@ -91,20 +93,36 @@ The following commands are supported at the moment:
  
 
 ### mlgw_mln
-**mlgw_mln** specifies the destination (B&O device) to which the command is being sent. The *Masterlink Node* (MLN) numbers of the B&O devices have been specified in the Masterlink Gateway configuration.
+**mlgw_mln** specifies the destination (B&O device) to which the command is being sent. The *Masterlink Node* (MLN) numbers of the B&O devices have been specified in the Masterlink Gateway configuration. You can specify the numeric value (as defined in the masterlink gateway) or for better readability, you can specify the corresponding string (as defined in *mlns = []* in plugin.conf)
 
 ---
 
-The following attributes are used to **receive triggers** from a B&O device:
+The following attributes are used to **receive triggers** from a B&O device. They can be used to define triggers to use within smarthome.py:
 
 ### mlgw_listen
-... 
+**mlgw_listen** has to be specified to listen for command telegrams from a B&O device. You can specify *LIGHT* or *CONTROL* to listen for the corresponding command set. The command to listen for has to be specified in **mlgw_cmd**.
+
+Items ti listen for have to be defined with the datatype *bool*.
 
 ### mlgw_room
-... 
+**mlgw_room** specifies the room (the B&O device is in) from which the command originated. The room numbers of the B&O devices have been specified in the Masterlink Gateway configuration. You can specify the numeric value (as defined in the masterlink gateway) or for better readability, you can specify the corresponding string (as defined in *rooms = []* in plugin.conf) 
 
 ### mlgw_cmd
-... 
+**mlgw_cmd** has to be specified, if you define **mlgw_listen**. In conjunction with **mlgw_listen**, the attribute **mlgw_cmd** specifies the command from a B&O remote control to listen for (e.g.: **mlgw_cmd** = *'STEP_UP'*). 
+
+The following commands are supported at the moment:
+
+    Digits:
+      'Digit-0', 'Digit-1', 'Digit-2', 'Digit-3', 'Digit-4', 
+      'Digit-5', 'Digit-6', 'Digit-7', 'Digit-8', 'Digit-9' 
+    from Source control:
+      'STEP_UP', 'STEP_DW', 'REWIND', 'RETURN', 'WIND', 'Go / Play', 
+      'Stop', 'Yellow', 'Green', 'Blue', 'Red' 
+    Other controls:
+      'BACK'
+    Cursor functions:
+      'SELECT', 'Cursor_Up', 'Cursor_Down', 'Cursor_Left', 'Cursor_Right'
+
 
 ### Example
 
@@ -137,21 +155,28 @@ Please provide an item configuration with every attribute and usefull settings.
                 mlgw_mln = 3
                 mlgw_cmd = 'Digit-1'
                 
-            [[living_light0]]
-                name = living room: Light "0"
-                type = bool
-                mlgw_listen = light
-                mlgw_room = 6
-                mlgw_cmd = 'Digit-0'
+        [[living_light0]]
+            name = living room: Light "0"
+            type = bool
+            mlgw_listen = light
+            mlgw_room = living
+            mlgw_cmd = 'Digit-0'
                 
-            [[[living_control0]]]
-                name = living room: Control "0"
-                type = bool
-                mlgw_listen = control
-                mlgw_room = 6
-                mlgw_cmd = 'Digit-0'
-
+        [[living_lightup]]
+            name = living room: Light Step_Up
+            type = bool
+            mlgw_listen = light
+            mlgw_room = living
+            mlgw_cmd = 'Step_Up'
+                
+        [[living_control0]]
+            name = living room: Control "0"
+            type = bool
+            mlgw_listen = control
+            mlgw_room = 6
+            mlgw_cmd = 'Digit-0'
 </pre>
+The attribute **name** has not to be specified. It serves in this example as a remark only.
 
 ## logic.conf
 If your plugin support item triggers as well, please describe the attributes like the item attributes.
