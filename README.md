@@ -29,7 +29,7 @@ This plugin need a Bang & Olufsen Masterlink Gateway and can connect to it via T
 #    password = mlgw
 #    rooms = []
 #    Mlns = []
-#    log_telegrams = 1        # parameter not implemented yet
+#    log_mlgwtelegrams = 0
 </pre>
 
 This plugins is looking for a masterlink gateway. By default it tries to connect to the host 'mlgw.local' on port 9000. You could change this in your plugin.conf.
@@ -38,7 +38,7 @@ If the masterlink gateway requires a login, you can specify username and passwor
 
 To make logging output more readable, you can specify a list of rooms and MLNs. 
 
-With **log_telegrams** you can control if decoded mlgw telegrams should be logged in the smarthome.log fie.
+With **log_mlgwtelegrams** you can control if decoded mlgw telegrams should be logged in the smarthome.log fie. The log level is raised to WARNING to ensure logging, if sh.py is running in quiet mode, its standard mode of operation.
 
 	- 0 no telegrams are written to the log
 	- 1 received telegrams that are not handled by the plugin are logged
