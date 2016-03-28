@@ -6,7 +6,7 @@
 #########################################################################
 # mlgw plugin is to be used with smarthome.py (http://mknx.github.io/smarthome/)
 #
-#  Version 0.3 beta
+#  Version 0.5 beta
 #
 #
 # masterlink-gateway plugin for smarthome.py is free software: you can 
@@ -47,6 +47,8 @@ def _hexword( byte1, byte2 ):
 # { listenerkey: item }, listenerkey = 256 * room + cmd
 listenerlightdict = {}
 listenercontroldict = {}
+listenersourcestatusdict = {}
+listenerspeakermodedict = {}
 
 
 #########################################################################################
@@ -113,7 +115,9 @@ beo4commanddict = dict( [
     (0x13, "SELECT"), (0xca, "Cursor_Up"), (0xcb, "Cursor_Down"), (0xcc, "Cursor_Left"), 
     (0xcd, "Cursor_Right"), 
     #    
-    (0x9b, "Light")
+    (0x9b, "Light"),  (0x9c, "Command"),
+    #  Dummy for 'Listen for all commands'
+    (0xff, "<all>")
     ] )
 
 reverse_beo4commanddict = {}
@@ -122,9 +126,13 @@ reverse_beo4commanddict = {}
 
 selectedsourcedict = dict( [
     (0x0b, "TV"), (0x15, "V.Mem"), (0x1f, "DTV"), (0x29, "DVD"), 
-    (0x6f, "Radio"), (0x79, "A.Mem"), (0x8d, "CD")
+    (0x6f, "Radio"), (0x79, "A.Mem"), (0x8d, "CD"),
+    #  Dummy for 'Listen for all sources'
+    (0xfe, "<all>")
     ] )
     
+reverse_selectedsourcedict = {}
+
 sourceactivitydict = dict( [
     (0x00, "Unknown"), (0x01, "Stop"), (0x02, "Playing"), (0x03, "Wind"), 
     (0x04, "Rewind"), (0x05, "Record lock"), (0x06, "Standby")
@@ -137,7 +145,7 @@ pictureformatdict = dict( [
     ] )
 
 
-### for '0x02: Picture and Sound Status'
+### for '0x03: Picture and Sound Status'
 
 soundstatusdict = dict( [
     (0x00, "Not muted"), (0x01, "Muted")
@@ -145,8 +153,12 @@ soundstatusdict = dict( [
 
 speakermodedict = dict( [
     (0x01, "Center channel"), (0x02, "2ch stereo"), (0x03, "Front surround"),
-    (0x04, "4ch stereo"), (0x05, "Full surround")
+    (0x04, "4ch stereo"), (0x05, "Full surround"),
+    #  Dummy for 'Listen for all modes'
+    (0xfd, "<all>")
     ] )
+
+reverse_speakermodedict = {}
 
 screenmutedict = dict( [
     (0x00, "not muted"), (0x01, "muted")
@@ -212,6 +224,12 @@ def _getselectedsourcestr( source ):
         result = selectedsourcedict.get( source )
         if result == None:
             result = "Src=" + _hexbyte( source )
+        return result
+
+def _getspeakermodestr( source ):
+        result = speakermodedict.get( source )
+        if result == None:
+            result = "mode=" + _hexbyte( source )
         return result
 
 def _getdictstr( mydict, mykey ):
@@ -298,7 +316,9 @@ class mlgwBase():
     #
     def __init__(self):
         global reverse_beo4commanddict
-        
+        global reverse_selectedsourcedict
+        global reverse_speakermodedict
+                
         self._host = ''
         self._tcpip = None
         self._port = None
@@ -307,8 +327,14 @@ class mlgwBase():
         self.telegramlogging = False
 
         reverse_beo4commanddict = {v.upper(): k for k, v in beo4commanddict.items()}
+        reverse_selectedsourcedict = {v.upper(): k for k, v in selectedsourcedict.items()}
+        reverse_speakermodedict = {v.upper(): k for k, v in speakermodedict.items()}
         logger.info("mlgw: beo4commanddict=" + str(beo4commanddict))
         logger.info("mlgw: reverse_beo4commanddict=" + str(reverse_beo4commanddict))
+        logger.info("mlgw: selectedsourcedict=" + str(selectedsourcedict))
+        logger.info("mlgw: reverse_selectedsourcedict=" + str(reverse_selectedsourcedict))
+        logger.info("mlgw: speakermodedict=" + str(speakermodedict))
+        logger.info("mlgw: reverse_speakermodedict=" + str(reverse_speakermodedict))
 
 
     ## Open tcp connection to mlgw
@@ -538,7 +564,9 @@ class mlgwlistener(threading.Thread):
     #  @param self The object pointer.
     #
     def processtelegram( self ):
-        # LIGHT and CONTROL telegrams
+        ishandled = False
+
+        ##### LIGHT and CONTROL telegrams
         if self._mlgwdata[1] == 0x04:
             cmd =  _getbeo4commandstr(self._mlgwdata[6])
             # LIGHT telegram
@@ -546,27 +574,70 @@ class mlgwlistener(threading.Thread):
                 # ignore commands: 0x58, Key Release, Light
                 if self._mlgwdata[6] in [0x58, 0x7e, 0x9b]:
                     return True
+                # update item, which is listening for all commands (return command string)
+                item = listenerlightdict.get(_hexword(self._mlgwdata[4], 255))
+                if item != None:
+#                    logger.warning('processtelegram: L&C telegram: room='+str(self._mlgwdata[4])+', LC=LIGHT, command='+cmd+', item='+str(item))
+                    item(cmd, 'mlgw', 'LIGHT <ALL>')
+                    ishandled = True
+                # update item (return 1)
                 item = listenerlightdict.get(_hexword(self._mlgwdata[4], self._mlgwdata[6]))
                 if item != None:
 #                    logger.warning('processtelegram: L&C telegram: room='+str(self._mlgwdata[4])+', LC=LIGHT, command='+cmd+', item='+str(item))
                     item(1, 'mlgw', 'LIGHT '+cmd)
-                    return True
-                else:
-                    return False
+                    ishandled = True
+
             # CONTROL telegram
             elif self._mlgwdata[5] == 0x02:
-                # ignore commands: 0x58, Key Release, Light
-                if self._mlgwdata[6] in [0x58, 0x7e, 0x9b]:
+                # ignore commands: 0x58, Key Release, Command
+                if self._mlgwdata[6] in [0x58, 0x7e, 0x9c]:
                     return True
+                # update item, which is listening for all commands (return command string)
+                item = listenercontroldict.get(_hexword(self._mlgwdata[4], 255))	# room
+                if item != None:
+#                    logger.warning('processtelegram: L&C telegram: room='+str(self._mlgwdata[4])+', LC=CONTROL, command='+cmd+', item='+str(item))
+                    item(cmd, 'mlgw', 'CONTROL <ALL>')
+                    ishandled = True
+                # update item (return 1)
                 item = listenercontroldict.get(_hexword(self._mlgwdata[4], self._mlgwdata[6]))
                 if item != None:
 #                    logger.warning('processtelegram: L&C telegram: room='+str(self._mlgwdata[4])+', LC=CONTROL, command='+cmd+', item='+str(item))
-                    item(1, 'mlgw', 'LIGHT '+cmd)
-                    return True
-                else:
-                    return False
+                    item(1, 'mlgw', 'CONTROL '+cmd)
+                    ishandled = True
 
-        return False
+        ##### SOURCE STATUS telegrams
+        elif self._mlgwdata[1] == 0x02:
+            source =  _getselectedsourcestr(self._mlgwdata[5])	# source
+            # update item, which is listening for all commands (return source string)
+            item = listenersourcestatusdict.get(_hexword(self._mlgwdata[4], 254))	# mln
+            if item != None:
+#                logger.warning('processtelegram: Source Status telegram: mln='+str(self._mlgwdata[4])+', source='+source+', item='+str(item))
+                item(source, 'mlgw', 'SOURCE STATUS <ALL>')
+                ishandled = True
+            # update item (return 1)
+            item = listenersourcestatusdict.get(_hexword(self._mlgwdata[4], self._mlgwdata[5]))	#mln, source
+            if item != None:
+#                logger.warning('processtelegram: Source Status telegram: mln='+str(self._mlgwdata[4])+', source='+source+', item='+str(item))
+                item(1, 'mlgw', 'SOURCE STATUS '+source)
+                ishandled = True
+
+        ##### PICT&SND STATUS telegrams
+        elif self._mlgwdata[1] == 0x03:
+            speakermode =  _getspeakermodestr(self._mlgwdata[6])	# speaker mode
+            # update item, which is listening for all commands (return speakermode string)
+            item = listenerspeakermodedict.get(_hexword(self._mlgwdata[4], 253))	# mln
+            if item != None:
+#                logger.warning('processtelegram: Source Status telegram: mln='+str(self._mlgwdata[4])+', speakermode='+speakermode+', item='+str(item))
+                item(speakermode, 'mlgw', 'PICT&SND STATUS <ALL>')
+                ishandled = True
+            # update item (return 1)
+            item = listenerspeakermodedict.get(_hexword(self._mlgwdata[4], self._mlgwdata[6]))	#mln, speakermode
+            if item != None:
+#                logger.warning('processtelegram: Source Status telegram: mln='+str(self._mlgwdata[4])+', speakermode='+speakermode+', item='+str(item))
+                item(1, 'mlgw', 'PICT&SND STATUS '+speakermode)
+                ishandled = True
+
+        return ishandled
 
 
     ## stop thread (a dummy at the ,moment)
@@ -650,8 +721,10 @@ class mlgw():
         if self._mlgwbase.connected == 0:
             return
 
-        logger.warning("listenerlightdict: " + str(listenerlightdict))
-        logger.warning("listenercontroldict: " + str(listenercontroldict))
+        logger.info("listenerlightdict: " + str(listenerlightdict))
+        logger.info("listenercontroldict: " + str(listenercontroldict))
+        logger.info("listenersourcestatusdict: " + str(listenersourcestatusdict))
+        logger.info("listenerspeakermodedict: " + str(listenerspeakermodedict))
 
         logger.debug("mlgw.run()")
         self.alive = True
@@ -691,14 +764,16 @@ class mlgw():
     def parse_item(self, item):
         global listenerlightdict
         global listenercontroldict
-        
+        global listenersourcestatusdict
+        global listenerspeakermodedict
+
         if 'mlgw_send' in item.conf:
             mln = reverse_mlndict.get(item.conf['mlgw_mln'].upper())
             if mln == None:
                 try:
                     mln = int(item.conf['mlgw_mln'])
                 except:
-                    logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_mln is not numeric and string is not defined in plugin.conf")
+                    logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_mln is not numeric")
                     return None
 
             if item.conf['mlgw_send'].upper() == 'CMD':
@@ -722,15 +797,16 @@ class mlgw():
                     return None
 
         if 'mlgw_listen' in item.conf:
-            room = reverse_roomdict.get(item.conf['mlgw_room'].upper())
-            if room == None:
-                try:
-                    room = int(item.conf['mlgw_room'])
-                except:
-                    logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_room is not numeric and string is not defined in plugin.conf")
-                    return None
 
             if item.conf['mlgw_listen'].upper() == 'LIGHT':
+                room = reverse_roomdict.get(item.conf['mlgw_room'].upper())
+                if room == None:
+                    try:
+                        room = int(item.conf['mlgw_room'])
+                    except:
+                        logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_room is not numeric")
+                        return None
+
                 if item._type == 'bool':
                     cmd = reverse_beo4commanddict.get(item.conf['mlgw_cmd'].upper())
                     if cmd == None:
@@ -738,6 +814,8 @@ class mlgw():
                             cmd = int( item.conf['mlgw_cmd'], 16 )
                         except:
                             pass
+                elif item._type == 'str':
+                    cmd = reverse_beo4commanddict.get('<ALL>')
                 item.conf['_mlgw_cmd'] = cmd
                 logger.info("mlgw: parse item: {0}".format(item) + ", type=" + item._type + ", item.conf=" + str(item.conf) )
                 # Dict aufbauen für Listener !!!
@@ -745,6 +823,14 @@ class mlgw():
                 return None     # Keine update routine an sh.py zurueckmelden, item kann nicht gesetzt (gesendet) werden
 
             if item.conf['mlgw_listen'].upper() == 'CONTROL':
+                room = reverse_roomdict.get(item.conf['mlgw_room'].upper())
+                if room == None:
+                    try:
+                        room = int(item.conf['mlgw_room'])
+                    except:
+                        logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_room is not numeric")
+                        return None
+
                 if item._type == 'bool':
                     cmd = reverse_beo4commanddict.get(item.conf['mlgw_cmd'].upper())
                     if cmd == None:
@@ -752,10 +838,60 @@ class mlgw():
                             cmd = int( item.conf['mlgw_cmd'], 16 )
                         except:
                             pass
+                elif item._type == 'str':
+                    cmd = reverse_beo4commanddict.get('<ALL>')
                 item.conf['_mlgw_cmd'] = cmd
                 logger.info("mlgw: parse item: {0}".format(item) + ", type=" + item._type + ", item.conf=" + str(item.conf) )
                 # Dict aufbauen für Listener !!!
                 listenercontroldict[_hexword(room, cmd)] = item
+                return None     # Keine update routine an sh.py zurueckmelden (item kann nicht gesetzt werden)
+
+            if item.conf['mlgw_listen'].upper() == 'SOURCE STATUS':
+                mln = reverse_mlndict.get(item.conf['mlgw_mln'].upper())
+                if mln == None:
+                    try:
+                        mln = int(item.conf['mlgw_mln'])
+                    except:
+                        logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_mln is not numeric")
+                        return None
+
+                if item._type == 'bool':
+                    source = reverse_selectedsourcedict.get(item.conf['mlgw_cmd'].upper())
+                    if source == None:
+                        try:
+                            source = int( item.conf['mlgw_cmd'], 16 )
+                        except:
+                            pass
+                elif item._type == 'str':
+                    source = reverse_selectedsourcedict.get('<ALL>')
+                item.conf['_mlgw_cmd'] = source
+                logger.info("mlgw: parse item: {0}".format(item) + ", type=" + item._type + ", item.conf=" + str(item.conf) )
+                # Dict aufbauen für Listener !!!
+                listenersourcestatusdict[_hexword(mln, source)] = item
+                return None     # Keine update routine an sh.py zurueckmelden (item kann nicht gesetzt werden)
+
+            if item.conf['mlgw_listen'].upper() == 'PICT&SND STATUS':
+                mln = reverse_mlndict.get(item.conf['mlgw_mln'].upper())
+                if mln == None:
+                    try:
+                        mln = int(item.conf['mlgw_mln'])
+                    except:
+                        logger.error("mlgw: parse item: {0}".format(item) + " - mlgw_mln is not numeric")
+                        return None
+
+                if item._type == 'bool':
+                    source = reverse_speakermodedict.get(item.conf['mlgw_cmd'].upper())
+                    if source == None:
+                        try:
+                            source = int( item.conf['mlgw_cmd'], 16 )
+                        except:
+                            pass
+                elif item._type == 'str':
+                    source = reverse_speakermodedict.get('<ALL>')
+                item.conf['_mlgw_cmd'] = source
+                logger.info("mlgw: parse item: {0}".format(item) + ", type=" + item._type + ", item.conf=" + str(item.conf) )
+                # Dict aufbauen für Listener !!!
+                listenerspeakermodedict[_hexword(mln, source)] = item
                 return None     # Keine update routine an sh.py zurueckmelden (item kann nicht gesetzt werden)
 
         else:
@@ -782,7 +918,14 @@ class mlgw():
     #
     def update_channel(self, item, caller=None, source=None, dest=None):
         if caller != 'mlgw':
-            mln = int(item.conf['mlgw_mln'])
+#            mln = int(item.conf['mlgw_mln'])
+            mln = reverse_mlndict.get(item.conf['mlgw_mln'].upper())
+            if mln == None:
+                try:
+                    mln = int(item.conf['mlgw_mln'])
+                except:
+                    logger.error("mlgw: update_channel: {0}".format(item) + " - mlgw_mln is not numeric")
+                    return None
             logger.warning("mlgw: update channel: {0}".format(item.id())+", value="+ str(item()) +", (MLN="+str(mln)+")")   # info
             channel = item()
             wrk = channel
@@ -809,7 +952,14 @@ class mlgw():
     #
     def update_item(self, item, caller=None, source=None, dest=None):
         if caller != 'mlgw':
-            mln = int(item.conf['mlgw_mln'])
+#            mln = int(item.conf['mlgw_mln'])
+            mln = reverse_mlndict.get(item.conf['mlgw_mln'].upper())
+            if mln == None:
+                try:
+                    mln = int(item.conf['mlgw_mln'])
+                except:
+                    logger.error("mlgw: update_item: {0}".format(item) + " - mlgw_mln is not numeric")
+                    return None
             if item._type == 'str':
                 cmd = reverse_beo4commanddict.get(item().upper())
                 if cmd == None:

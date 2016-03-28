@@ -1,10 +1,26 @@
 # Bang & Olufsen Masterlink Gateway #
 
-Version 0.3 beta
+Version 0.5 beta
 
-This plugin can send commands to all Bang & Olufsen audio- and video systems which are connected to a Masterlink Gateway. Supported commands are the commands, a B&O remote can produce.
+This is a plugin for smarthome.py. It can send commands to all Bang & Olufsen audio- and video systems which are connected to a Masterlink Gateway. Supported commands are the commands, a B&O remote can produce.
 
 This plugin can receive telegrams, which are send by an B&O audio- or video system. These commands are the **LIGHT** and **CONTROL** commands, which originate from a B&O remote control (e.g. Beo4).
+
+Additionally it is possible to listen for selected attributes of the **SOURCE STATUS** and **PICT&SND STATUS** telegrams sent by B&O audio- or video systems. (Beolink Active devices don't send these telegrams)
+
+# Changes Since version 0.4 
+
+- handling of listening for SOURCE STATUS command implemented
+- handling of listening for PICT&SND STATUS commands implemented
+- mlns in item.conf can now be specified by their names (as defined in plugin.conf) or by their number (as before)
+- Bug fixes
+
+
+# Changes Since version 0.3 
+
+- listening vor any LIGHT or CONTROL command implemented
+- handling of listening for CONTROL Cinema-Off command for BeoSystem 3 documented
+- handling of listening for CONTROL commands corrected
 
 
 # Requirements
@@ -25,12 +41,12 @@ This plugin need a Bang & Olufsen Masterlink Gateway and can connect to it via T
 [mlgw]
     class_name = mlgw
     class_path = plugins.mlgw
-#    host = 'mlgw.local'
+#    host = mlgw.local
 #    port = 9000
 #    username = mlgw
 #    password = mlgw
-#    rooms = ['living', 'kitchen']
-#    Mlns = []
+#    rooms = {1: 'living', 2:'kitchen'}		# numbers as defined in the gateway
+#    Mlns = {1: "BV10", 2: "BLActive"}		# numbers as defined in the gateway
 #    log_mlgwtelegrams = 0
 </pre>
 
@@ -67,7 +83,7 @@ When setting **mlgw_send** = *ch*, you have to define the datatype as numeric (*
 ### mlgw_cmd
 **mlgw_cmd** has to be specified, if you set **mlgw_send** = *cmd* and define the item's datatype as *bool*. In conjunction with **mlgw_send**, the attribute **mlgw_cmd** specifies the command to send (e.g.: **mlgw_cmd** = *'DVD'*). 
 
-The following commands are supported at the moment:
+The following commands are supported in conjunction with **mlgw_send** at the moment:
 
     Source selection:
       'Standby', 'Sleep', 'TV', 'Radio', 'DTV2', 'Aux_A', 'V.Mem'),
@@ -100,17 +116,26 @@ The following commands are supported at the moment:
 The following attributes are used to **receive triggers** from a B&O device. They can be used to define triggers to use within smarthome.py:
 
 ### mlgw_listen
-**mlgw_listen** has to be specified to listen for command telegrams from a B&O device. You can specify *LIGHT* or *CONTROL* to listen for the corresponding command set. The command to listen for has to be specified in **mlgw_cmd**.
+**mlgw_listen** has to be specified to listen for command telegrams from a B&O device. You have to specify *LIGHT* or *CONTROL* to listen for the corresponding command set. You can listen for a specific command or listen for any command
 
-Items ti listen for have to be defined with the datatype *bool*.
+If you want to listen for a specific command, the command to listen for has to be specified in **mlgw_cmd** and the **type** of the item has to be **bool**. The item is set to true, when the corresponding command is received. Remember to set **enforce_updates** to **true** to ensure correct handling of multiple occurrences of the same command.
+
+If you want to listen for any command, the **type** of the item has to be **str** and **mlgw_cmd** has not to be specified. In this case, the name of the command (e.g.: 'STEP_UP'*) is returned in the item.
 
 ### mlgw_room
 **mlgw_room** specifies the room (the B&O device is in) from which the command originated. The room numbers of the B&O devices have been specified in the Masterlink Gateway configuration. You can specify the numeric value (as defined in the masterlink gateway) or for better readability, you can specify the corresponding string (as defined in *rooms = []* in plugin.conf) 
 
+**mlgw_room** has to be defined to listen for **LIGHT** and **COMMAND** command telegrams.
+
+### mlgw_mln
+**mlgw_mln** specifies the source (B&O device) from which the command is going to be being received. The *Masterlink Node* (MLN) numbers of the B&O devices have been specified in the Masterlink Gateway configuration. You can specify the numeric value (as defined in the masterlink gateway) or for better readability, you can specify the corresponding string (as defined in *mlns = []* in plugin.conf)
+
+**mlgw_mln** has to be defined to listen for **SOURCE STATUS** and **PICT&SND STATUS** telegrams.
+
 ### mlgw_cmd
 **mlgw_cmd** has to be specified, if you define **mlgw_listen**. In conjunction with **mlgw_listen**, the attribute **mlgw_cmd** specifies the command from a B&O remote control to listen for (e.g.: **mlgw_cmd** = *'STEP_UP'*). 
 
-The following commands are supported at the moment:
+The following commands are supported in conjunction with **mlgw_listen** at the moment:
 
     Digits:
       'Digit-0', 'Digit-1', 'Digit-2', 'Digit-3', 'Digit-4', 
@@ -118,6 +143,8 @@ The following commands are supported at the moment:
     from Source control:
       'STEP_UP', 'STEP_DW', 'REWIND', 'RETURN', 'WIND', 'Go / Play', 
       'Stop', 'Yellow', 'Green', 'Blue', 'Red' 
+    Sound and picture control (only CONTROL, only on BeoSystem 3 based TVs):
+      'Cinema_On', 'Cinema_Off' 
     Other controls:
       'BACK'
     Cursor functions:
